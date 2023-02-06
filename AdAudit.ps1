@@ -137,6 +137,7 @@ Param (
     [switch]$authpolsilos    = $false,
     [switch]$insecurednszone = $false,
     [switch]$recentchanges   = $false,
+    [switch]$dgov            = $false,
     [switch]$all             = $false
 )
 $versionnum               = "v5.4"
@@ -151,6 +152,7 @@ Function Get-Variables(){#Retrieve group names and OS version
     $script:DomainControllersSID           = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-516"
     $script:SchemaAdminsSID                = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-518"
     $script:EnterpriseAdminsSID            = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-519"
+    $script:OrganizationManagementSID      = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-26754"
     $script:EveryOneSID                    = New-Object System.Security.Principal.SecurityIdentifier "S-1-1-0"
     $script:EntrepriseDomainControllersSID = New-Object System.Security.Principal.SecurityIdentifier "S-1-5-9"
     $script:AuthenticatedUsersSID          = New-Object System.Security.Principal.SecurityIdentifier "S-1-5-11"
@@ -160,7 +162,9 @@ Function Get-Variables(){#Retrieve group names and OS version
     $script:DomainUsers                    = (Get-ADGroup -Identity $DomainUsersSID).SamAccountName
     $script:DomainControllers              = (Get-ADGroup -Identity $DomainControllersSID).SamAccountName
     $script:SchemaAdmins                   = (Get-ADGroup -Identity $SchemaAdminsSID).SamAccountName
+    $script:Administrators                 = (Get-ADGroup -Identity $Administrators).SamAccountName
     $script:EnterpriseAdmins               = (Get-ADGroup -Identity $EnterpriseAdminsSID).SamAccountName
+    $script:OrganizationManagement         = (Get-ADGroup -Identity $OrganizationManagementSID).SamAccountName
     $script:EveryOne                       = $EveryOneSID.Translate([System.Security.Principal.NTAccount]).Value
     $script:EntrepriseDomainControllers    = $EntrepriseDomainControllersSID.Translate([System.Security.Principal.NTAccount]).Value
     $script:AuthenticatedUsers             = $AuthenticatedUsersSID.Translate([System.Security.Principal.NTAccount]).Value
@@ -294,9 +298,13 @@ Function Get-PrivilegedGroupAccounts{#Lists users in Admininstrators, DA and EA 
     $privilegedusers += Get-ADGroupMember $Administrators   -Recursive
     $privilegedusers += Get-ADGroupMember $DomainAdmins     -Recursive
     $privilegedusers += Get-ADGroupMember $EnterpriseAdmins -Recursive
+    $privilegedusers += Get-ADGroupMember $SchemaAdmins     -Recursive
+    $privilegedusers += Get-ADGroupMember $OrganizationManagement -Recursive
     $privusersunique  = $privilegedusers | Sort-Object -Unique
     $count            = 0
     $totalcount       = ($privilegedusers | Measure-Object | Select-Object Count).count
+
+    New-item -Path $outputdir -Name "accounts_userPrivileged.txt" -ItemType File
     foreach($account in $privusersunique){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for users who are in privileged groups..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
@@ -914,20 +922,34 @@ Function Get-PrivilegedGroupMembership{#List Domain Admins, Enterprise Admins an
     $SchemaMembers       = Get-ADGroup $SchemaAdmins     | Get-ADGroupMember
     $EnterpriseMembers   = Get-ADGroup $EnterpriseAdmins | Get-ADGroupMember
     $DomainAdminsMembers = Get-ADGroup $DomainAdmins     | Get-ADGroupMember
+    $AdministratorsMembers = Get-ADGroup $Administrators | Get-ADGroupMember
+    $OrganizationManagementMembers = Get-ADGroup $OrganizationManagement | Get-ADGroupMember
+
+    New-item -Path $outputdir -Name "schema_admins.txt" -ItemType File
     if(($SchemaMembers | measure).count -ne 0){
             Write-Both "    [!] Schema Admins not empty!!!"
         foreach($member in $SchemaMembers){
             Add-Content -Path "$outputdir\schema_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
         }
     }
+    New-item -Path $outputdir -Name "enterprise_admins.txt" -ItemType File
     if(($EnterpriseMembers | measure).count -ne 0){
             Write-Both "    [!] Enterprise Admins not empty!!!"
         foreach($member in $EnterpriseMembers){
             Add-Content -Path "$outputdir\enterprise_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
         }
     }
+    New-item -Path $outputdir -Name "domain_admins.txt" -ItemType File
     foreach($member in $DomainAdminsMembers){
         Add-Content -Path "$outputdir\domain_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+    }
+    New-item -Path $outputdir -Name "administrators.txt" -ItemType File
+    foreach($member in $AdministratorsMembers){
+        Add-Content -Path "$outputdir\administrators.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+    }
+    New-item -Path $outputdir -Name "organization_management.txt" -ItemType File
+    foreach($member in $OrganizationManagementMembers){
+        Add-Content -Path "$outputdir\orgainzation_management.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
     }
 }
 Function Get-DCEval{#Basic validation of all DCs in forest
@@ -1326,20 +1348,20 @@ Write-Nessus-Header
 Write-Host "[+] Outputting to $outputdir"
 Write-Both "[*] Lang specific variables"
 Get-Variables
-if($installdeps)             { $running=$true ; Write-Both "[*] Installing optionnal features"                           ; Install-Dependencies }
-if($hostdetails -or $all)    { $running=$true ; Write-Both "[*] Device Information"                                      ; Get-HostDetails }
-if($domainaudit -or $all)    { $running=$true ; Write-Both "[*] Domain Audit"                                            ; Get-LastWUDate ; Get-DCEval ; Get-TimeSource ; Get-PrivilegedGroupMembership ; Get-MachineAccountQuota; Get-DefaultDomainControllersPolicy ; Get-SMB1Support ; Get-FunctionalLevel ; Get-DCsNotOwnedByDA ; Get-ReplicationType ; Check-Shares ; Get-RecycleBinState ; Get-CriticalServicesStatus ; Get-RODC }
-if($trusts -or $all)         { $running=$true ; Write-Both "[*] Domain Trust Audit"                                      ; Get-DomainTrusts }
-if($accounts -or $all)       { $running=$true ; Write-Both "[*] Accounts Audit"                                          ; Get-InactiveAccounts ; Get-DisabledAccounts ; Get-LockedAccounts ; Get-AdminAccountChecks ; Get-NULLSessions ; Get-PrivilegedGroupAccounts ; Get-ProtectedUsers }
-if($passwordpolicy -or $all) { $running=$true ; Write-Both "[*] Password Information Audit"                              ; Get-AccountPassDontExpire ; Get-UserPasswordNotChangedRecently ; Get-PasswordPolicy ; Get-PasswordQuality }
-if($ntds -or $all)           { $running=$true ; Write-Both "[*] Trying to save NTDS.dit, please wait..."                 ; Get-NTDSdit }
-if($oldboxes -or $all)       { $running=$true ; Write-Both "[*] Computer Objects Audit"                                  ; Get-OldBoxes }
-if($gpo -or $all)            { $running=$true ; Write-Both "[*] GPO audit (and checking SYSVOL for passwords)"           ; Get-GPOtoFile ; Get-GPOsPerOU ; Get-SYSVOLXMLS; Get-GPOEnum }
-if($ouperms -or $all)        { $running=$true ; Write-Both "[*] Check Generic Group AD Permissions"                      ; Get-OUPerms }
-if($laps -or $all)           { $running=$true ; Write-Both "[*] Check For Existence of LAPS in domain"                   ; Get-LAPSStatus }
-if($authpolsilos -or $all)   { $running=$true ; Write-Both "[*] Check For Existence of Authentication Polices and Silos" ; Get-AuthenticationPoliciesAndSilos }
-if($insecurednszone -or $all){ $running=$true ; Write-Both "[*] Check For Existence DNS Zones allowing insecure updates" ; Get-DNSZoneInsecure }
-if($recentchanges -or $all)  { $running=$true ; Write-Both "[*] Check For newly created users and groups"                ; Get-RecentChanges }
+if($installdeps)             { $running=$true ; Write-Both "[*] Installing optionnal features"                                     ; Install-Dependencies }
+if($hostdetails -or $all -or $dgov)    { $running=$true ; Write-Both "[*] Device Information"                                      ; Get-HostDetails }
+if($domainaudit -or $all -or $dgov)    { $running=$true ; Write-Both "[*] Domain Audit"                                            ; Get-LastWUDate ; Get-DCEval ; Get-TimeSource ; Get-PrivilegedGroupMembership ; Get-MachineAccountQuota; Get-DefaultDomainControllersPolicy ; Get-SMB1Support ; Get-FunctionalLevel ; Get-DCsNotOwnedByDA ; Get-ReplicationType ; Check-Shares ; Get-RecycleBinState ; Get-CriticalServicesStatus ; Get-RODC }
+if($trusts -or $all)         { $running=$true ; Write-Both "[*] Domain Trust Audit"                                                ; Get-DomainTrusts }
+if($accounts -or $all -or $dgov)       { $running=$true ; Write-Both "[*] Accounts Audit"                                          ; Get-InactiveAccounts ; Get-DisabledAccounts ; Get-LockedAccounts ; Get-AdminAccountChecks ; Get-NULLSessions ; Get-PrivilegedGroupAccounts ; Get-ProtectedUsers }
+if($passwordpolicy -or $all -or $dgov) { $running=$true ; Write-Both "[*] Password Information Audit"                              ; Get-AccountPassDontExpire ; Get-UserPasswordNotChangedRecently ; Get-PasswordPolicy ; Get-PasswordQuality }
+if($ntds -or $all)           { $running=$true ; Write-Both "[*] Trying to save NTDS.dit, please wait..."                           ; Get-NTDSdit }
+if($oldboxes -or $all -or $dgov)       { $running=$true ; Write-Both "[*] Computer Objects Audit"                                  ; Get-OldBoxes }
+if($gpo -or $all -or $dgov )            { $running=$true ; Write-Both "[*] GPO audit (and checking SYSVOL for passwords)"          ; Get-GPOtoFile ; Get-GPOsPerOU ; Get-SYSVOLXMLS; Get-GPOEnum }
+if($ouperms -or $all -or $dgov)        { $running=$true ; Write-Both "[*] Check Generic Group AD Permissions"                      ; Get-OUPerms }
+if($laps -or $all -or $dgov )           { $running=$true ; Write-Both "[*] Check For Existence of LAPS in domain"                  ; Get-LAPSStatus }
+if($authpolsilos -or $all -or $dgov)   { $running=$true ; Write-Both "[*] Check For Existence of Authentication Polices and Silos" ; Get-AuthenticationPoliciesAndSilos }
+if($insecurednszone -or $all){ $running=$true ; Write-Both "[*] Check For Existence DNS Zones allowing insecure updates"           ; Get-DNSZoneInsecure }
+if($recentchanges -or $all -or $dgov)  { $running=$true ; Write-Both "[*] Check For newly created users and groups"                ; Get-RecentChanges }
 if(!$running){ Write-Both "[!] No arguments selected"
     Write-Both "[!] Other options are as follows, they can be used in combination"
     Write-Both "    -installdeps installs optionnal features (DSInternals)"
@@ -1356,6 +1378,7 @@ if(!$running){ Write-Both "[!] No arguments selected"
     Write-Both "    -authpolsilos checks for existence of authentication policies and silos"
     Write-Both "    -insecurednszone checks for insecure DNS zones"
     Write-Both "    -recentchanges checks for newly created users and groups (last 30 days)"
+    Write-Both "    -runs script with swiches for dgov"
     Write-Both "    -all runs all checks, e.g. $scriptname -all"
 }
 Write-Nessus-Footer
