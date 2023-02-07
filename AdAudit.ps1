@@ -584,7 +584,7 @@ Function Get-InactiveAccounts{#Lists accounts not used in past 180 days plus som
     $progresscount    = 0
     $inactiveaccounts = Search-ADaccount -AccountInactive -Timespan (New-TimeSpan -Days 180) -UsersOnly | Where-Object {$_.Enabled -eq $true}
     $totalcount       = ($inactiveaccounts | Measure-Object | Select-Object Count).count
-    New-item -Path $outputdir -Name "accounts_disabled.txt" -ItemType File -force
+    New-item -Path $outputdir -Name "accounts_inactive.txt" -ItemType File -force
     foreach($account in $inactiveaccounts){
         if($totalcount -eq 0){ break }
         $progresscount++
@@ -679,7 +679,7 @@ Function Get-AccountPassDontExpire{#Lists accounts who's passwords dont expire
     }
 }
 Function Get-AllUsers{#Lists all AD user accounts
-    $userAccounts = Get-ADUser -Filter * -Properties Name, Enabled, LastLogonDate
+    $userAccounts = Get-ADUser -Filter * -Properties SamAccountName, Enabled, LastLogonDate
     $count        = 0
     $totalcount   = ($userAccounts | Measure-Object | Select-Object Count).Count
 
@@ -687,7 +687,7 @@ Function Get-AllUsers{#Lists all AD user accounts
     foreach($account in $userAccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for all users..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
-        Add-Content -Path "$outputdir\accounts_users_all.txt" -Value "$($account.SamAccountName) $($account.Enabled) ($($account.LastLogonDate)"
+        Add-Content -Path "$outputdir\accounts_users_all.txt" -Value "$($account.SamAccountName) $($account.Enabled) $($account.LastLogonDate)"
         $count++
     }
     Write-Progress -Activity "Searching for all users..." -Status "Ready" -Completed
