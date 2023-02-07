@@ -679,7 +679,7 @@ Function Get-AccountPassDontExpire{#Lists accounts who's passwords dont expire
     }
 }
 Function Get-AllUsers{#Lists all AD user accounts
-    $userAccounts = Search-ADaccount -UsersOnly
+    $userAccounts = Search-ADaccount -UsersOnly | Where-Object {$_.Enabled -eq true}
     $count            = 0
     $totalcount       = ($userAccounts | Measure-Object | Select-Object Count).count
     New-item -Path $outputdir -Name "accounts_users_all.txt" -ItemType File -force
@@ -695,7 +695,7 @@ Function Get-AllUsers{#Lists all AD user accounts
     }
 }
 Function Get-AllComputers{#Lists all AD computer accounts
-    $computerAccounts = Search-ADaccount -ComputersOnly
+    $computerAccounts = Search-ADaccount -ComputersOnly | Where-Object {$_.Enabled -eq true}
     $count            = 0
     $totalcount       = ($computerAccounts | Measure-Object | Select-Object Count).count
     New-item -Path $outputdir -Name "accounts_computers_all.txt" -ItemType File -force
