@@ -687,7 +687,7 @@ Function Get-AllUsers{#Lists all AD user accounts
     foreach($account in $userAccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for all users..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
-        Add-Content -Path "$outputdir\accounts_users_all.txt" -Value "$($account.SamAccountName) $($account.Enabled) $($account.LastLogonDate)"
+        Add-Content -Path "$outputdir\accounts_users_all.txt" -Value "$($account.SamAccountName),$($account.Enabled),$($account.LastLogonDate)"
         $count++
     }
     Write-Progress -Activity "Searching for all users..." -Status "Ready" -Completed
@@ -703,7 +703,7 @@ Function Get-AllComputers{#Lists all AD computer accounts
     foreach($account in $computerAccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for all computers..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
-        Add-Content -Path "$outputdir\accounts_computers_all.txt" -Value "$($account.Name) $($account.Enabled) $($account.OperatingSystem) $($account.OperatingSystemVersion)"
+        Add-Content -Path "$outputdir\accounts_computers_all.txt" -Value "$($account.Name),$($account.Enabled),$($account.OperatingSystem),$($account.OperatingSystemVersion)"
         $count++
     }
     Write-Progress -Activity "Searching for all computers..." -Status "Ready" -Completed
@@ -978,23 +978,23 @@ Function Get-PrivilegedGroupMembership{#List Domain Admins, Enterprise Admins an
     if(($SchemaMembers | measure).count -ne 0){
             Write-Both "    [!] Schema Admins not empty!!!"
         foreach($member in $SchemaMembers){
-            Add-Content -Path "$outputdir\schema_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+            Add-Content -Path "$outputdir\schema_admins.txt" -Value "$($member.objectClass),$($member.SamAccountName)"
         }
     }
     New-item -Path $outputdir -Name "enterprise_admins.txt" -ItemType File -force
     if(($EnterpriseMembers | measure).count -ne 0){
             Write-Both "    [!] Enterprise Admins not empty!!!"
         foreach($member in $EnterpriseMembers){
-            Add-Content -Path "$outputdir\enterprise_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+            Add-Content -Path "$outputdir\enterprise_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName)"
         }
     }
     New-item -Path $outputdir -Name "domain_admins.txt" -ItemType File -force
     foreach($member in $DomainAdminsMembers){
-        Add-Content -Path "$outputdir\domain_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+        Add-Content -Path "$outputdir\domain_admins.txt" -Value "$($member.objectClass) $($member.SamAccountName)"
     }
     New-item -Path $outputdir -Name "administrators.txt" -ItemType File -force
     foreach($member in $AdministratorsMembers){
-        Add-Content -Path "$outputdir\administrators.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+        Add-Content -Path "$outputdir\administrators.txt" -Value "$($member.objectClass) $($member.SamAccountName)"
     }
     #New-item -Path $outputdir -Name "organization_management.txt" -ItemType File
     #foreach($member in $OrganizationManagementMembers){
