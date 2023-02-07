@@ -11,6 +11,10 @@
             * Tested on Windows Server 2008R2/2012/2012R2/2016/2019/2022
             * All languages (you may need to adjust $AdministratorTranslation variable)
         o Changelog :
+            [x] Version 5.41 - 07/02/2023
+                * Modify options to run script with DGov switches, add administrators group output and all_users.txt, 
+                * 
+                * Added nessus output for GPO issues
             [x] Version 5.4 - 16/08/2022
                 * Added nessus output tags for LAPS
                 * Added nessus output for GPO issues
@@ -137,6 +141,8 @@ Param (
     [switch]$authpolsilos    = $false,
     [switch]$insecurednszone = $false,
     [switch]$recentchanges   = $false,
+    [switch]$usersall        = $false,
+    [switch]$computersall    = $false,
     [switch]$dgov            = $false,
     [switch]$all             = $false
 )
@@ -152,7 +158,7 @@ Function Get-Variables(){#Retrieve group names and OS version
     $script:DomainControllersSID           = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-516"
     $script:SchemaAdminsSID                = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-518"
     $script:EnterpriseAdminsSID            = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-519"
-    $script:OrganizationManagementSID      = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-26754"
+    #$script:OrganizationManagementSID      = ((Get-ADDomain -Current LoggedOnUser).domainsid.value)+"-26754"
     $script:EveryOneSID                    = New-Object System.Security.Principal.SecurityIdentifier "S-1-1-0"
     $script:EntrepriseDomainControllersSID = New-Object System.Security.Principal.SecurityIdentifier "S-1-5-9"
     $script:AuthenticatedUsersSID          = New-Object System.Security.Principal.SecurityIdentifier "S-1-5-11"
@@ -164,7 +170,7 @@ Function Get-Variables(){#Retrieve group names and OS version
     $script:SchemaAdmins                   = (Get-ADGroup -Identity $SchemaAdminsSID).SamAccountName
     $script:Administrators                 = (Get-ADGroup -Identity $Administrators).SamAccountName
     $script:EnterpriseAdmins               = (Get-ADGroup -Identity $EnterpriseAdminsSID).SamAccountName
-    $script:OrganizationManagement         = (Get-ADGroup -Identity $OrganizationManagementSID).SamAccountName
+    #$script:OrganizationManagement         = (Get-ADGroup -Identity $OrganizationManagementSID).SamAccountName
     $script:EveryOne                       = $EveryOneSID.Translate([System.Security.Principal.NTAccount]).Value
     $script:EntrepriseDomainControllers    = $EntrepriseDomainControllersSID.Translate([System.Security.Principal.NTAccount]).Value
     $script:AuthenticatedUsers             = $AuthenticatedUsersSID.Translate([System.Security.Principal.NTAccount]).Value
@@ -225,6 +231,7 @@ Function Get-OUPerms{#Check for non-standard perms for authenticated users, doma
     $progresscount = 0
     $objects       = (Get-ADObject -Filter *)
     $totalcount    = ($objects | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "ou_permissions.txt" -ItemType File
     foreach($object in $objects){
         if($totalcount -eq 0){ break }
         $progresscount++
@@ -299,7 +306,7 @@ Function Get-PrivilegedGroupAccounts{#Lists users in Admininstrators, DA and EA 
     $privilegedusers += Get-ADGroupMember $DomainAdmins     -Recursive
     $privilegedusers += Get-ADGroupMember $EnterpriseAdmins -Recursive
     $privilegedusers += Get-ADGroupMember $SchemaAdmins     -Recursive
-    $privilegedusers += Get-ADGroupMember $OrganizationManagement -Recursive
+    #$privilegedusers += Get-ADGroupMember $OrganizationManagement -Recursive
     $privusersunique  = $privilegedusers | Sort-Object -Unique
     $count            = 0
     $totalcount       = ($privilegedusers | Measure-Object | Select-Object Count).count
@@ -485,6 +492,7 @@ Function Get-UserPasswordNotChangedRecently{#Reports users that haven't changed 
     $DaysAgo              = (Get-Date).AddDays(-90)
     $accountsoldpasswords = Get-ADUser -Filter {PwdLastSet -lt $DaysAgo -and Enabled -eq "true"} -Properties PasswordLastSet
     $totalcount           = ($accountsoldpasswords | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "accounts_with_old_passwords.txt" -ItemType File
     foreach($account in $accountsoldpasswords){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for passwords older than 90days..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
@@ -520,6 +528,7 @@ Function Get-GPOsPerOU{#Lists all OUs and which GPOs apply to them
     $count      = 0
     $ousgpos    = @(Get-ADOrganizationalUnit -Filter *)
     $totalcount = ($ousgpos | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "ous_inheritedGPOs.txt" -ItemType File
     foreach($ouobject in $ousgpos){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Identifying which GPOs apply to which OUs..." -Status "Currently identifed $count OUs" -PercentComplete ($count / $totalcount*100)
@@ -575,6 +584,7 @@ Function Get-InactiveAccounts{#Lists accounts not used in past 180 days plus som
     $progresscount    = 0
     $inactiveaccounts = Search-ADaccount -AccountInactive -Timespan (New-TimeSpan -Days 180) -UsersOnly | Where-Object {$_.Enabled -eq $true}
     $totalcount       = ($inactiveaccounts | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "accounts_disabled.txt" -ItemType File
     foreach($account in $inactiveaccounts){
         if($totalcount -eq 0){ break }
         $progresscount++
@@ -622,6 +632,7 @@ Function Get-DisabledAccounts{#Lists disabled accounts
     $disabledaccounts = Search-ADaccount -AccountDisabled -UsersOnly
     $count            = 0
     $totalcount       = ($disabledaccounts | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "accounts_disabled.txt" -ItemType File
     foreach($account in $disabledaccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for disabled users..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
@@ -638,6 +649,7 @@ Function Get-LockedAccounts{#Lists locked accounts
     $lockedAccounts = Get-ADUser -Filter * -Properties LockedOut | Where-Object {$_.LockedOut -eq $true}
     $count          = 0
     $totalcount     = ($lockedAccounts | Measure-Object | Select-Object Count).Count
+    New-item -Path $outputdir -Name "accounts_locked.txt" -ItemType File
     foreach($account in $lockedAccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for locked users..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
@@ -653,6 +665,7 @@ Function Get-AccountPassDontExpire{#Lists accounts who's passwords dont expire
     $count                = 0
     $nonexpiringpasswords = Search-ADAccount -PasswordNeverExpires -UsersOnly | Where-Object {$_.Enabled -eq $true}
     $totalcount           = ($nonexpiringpasswords | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "accounts_passdontexpire.txt" -ItemType File
     foreach($account in $nonexpiringpasswords){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for users with passwords that dont expire..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
@@ -665,10 +678,43 @@ Function Get-AccountPassDontExpire{#Lists accounts who's passwords dont expire
         Write-Nessus-Finding "AccountsThatDontExpire" "KB254" ([System.IO.File]::ReadAllText("$outputdir\accounts_passdontexpire.txt"))
     }
 }
+Function Get-AllUsers{#Lists all AD user accounts
+    $userAccounts = Search-ADaccount -UsersOnly
+    $count            = 0
+    $totalcount       = ($userAccounts | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name ""accounts_users_all.txt" -ItemType File
+    foreach($account in $userAccounts){
+        if($totalcount -eq 0){ break }
+        Write-Progress -Activity "Searching for all users..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
+        Add-Content -Path "$outputdir\"accounts_users_all.txt" -Value "$($account.SamAccountName)"
+        $count++
+    }
+    Write-Progress -Activity "Searching for all users..." -Status "Ready" -Completed
+    if($count -gt 0){
+        Write-Both "    [!] $count all user accounts, see accounts_users_all.txt"
+    }
+}
+Function Get-AllComputers{#Lists all AD computer accounts
+    $computerAccounts = Search-ADaccount -ComputersOnly
+    $count            = 0
+    $totalcount       = ($computerAccounts | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "accounts_computers_all.txt" -ItemType File
+    foreach($account in $computerAccounts){
+        if($totalcount -eq 0){ break }
+        Write-Progress -Activity "Searching for all computers..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
+        Add-Content -Path "$outputdir\accounts_computers_all.txt" -Value "$($account.SamAccountName) $($account.LastLogonDate)"
+        $count++
+    }
+    Write-Progress -Activity "Searching for all computers..." -Status "Ready" -Completed
+    if($count -gt 0){
+        Write-Both "    [!] $count all computer accounts, see accounts_computers_all.txt"
+    }
+}
 Function Get-OldBoxes{#Lists 2000/2003/XP/Vista/7/2008 machines
     $count      = 0
     $oldboxes   = Get-ADComputer -Filter {OperatingSystem -Like "*2003*" -and Enabled -eq "true" -or OperatingSystem -Like "*XP*" -and Enabled -eq "true" -or OperatingSystem -Like "*2000*" -and Enabled -eq "true" -or OperatingSystem -like '*Windows 7*' -and Enabled -eq "true" -or OperatingSystem -like '*vista*' -and Enabled -eq "true" -or OperatingSystem -like '*2008*' -and Enabled -eq "true"} -Property OperatingSystem
     $totalcount = ($oldboxes | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "machines_old.txt" -ItemType File
     foreach($machine in $oldboxes){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for 2000/2003/XP/Vista/7/2008 devices joined to the domain..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
@@ -830,6 +876,7 @@ Function Get-GPOEnum{#Loops GPOs for some important domain-wide settings
         }
         #Validates Admins local logon restrictions
         $permissionindex = $GPOreport.IndexOf('SeDenyInteractiveLogonRight')
+        New-item -Path $outputdir -Name "admin_logon_restrictions.txt" -ItemType File
         if($permissionindex -gt 0){
             $xmlreport = [xml]$GPOreport
             foreach($member in (($xmlreport.GPO.Computer.ExtensionData.Extension.UserRightsAssignment | Where-Object {$_.Name -eq 'SeDenyInteractiveLogonRight'}).Member)){
@@ -887,6 +934,7 @@ Function Get-GPOEnum{#Loops GPOs for some important domain-wide settings
         Write-Nessus-Finding "WeakKerberosEncryption" "KB995" "RC4_HMAC_MD5 enabled for Kerberos across domain!"
     }
     #Output for deny NTLM
+    New-item -Path $outputdir -Name "ntlm_restrictions.txt" -ItemType File
     if($DenyNTLM.count -eq 0){
         if($HardenNTLM.count -eq 0){
             Write-Both "    [!] No GPO denies NTLM authentication!"
@@ -923,7 +971,7 @@ Function Get-PrivilegedGroupMembership{#List Domain Admins, Enterprise Admins an
     $EnterpriseMembers   = Get-ADGroup $EnterpriseAdmins | Get-ADGroupMember
     $DomainAdminsMembers = Get-ADGroup $DomainAdmins     | Get-ADGroupMember
     $AdministratorsMembers = Get-ADGroup $Administrators | Get-ADGroupMember
-    $OrganizationManagementMembers = Get-ADGroup $OrganizationManagement | Get-ADGroupMember
+    #$OrganizationManagementMembers = Get-ADGroup $OrganizationManagement | Get-ADGroupMember
 
     New-item -Path $outputdir -Name "schema_admins.txt" -ItemType File
     if(($SchemaMembers | measure).count -ne 0){
@@ -947,10 +995,10 @@ Function Get-PrivilegedGroupMembership{#List Domain Admins, Enterprise Admins an
     foreach($member in $AdministratorsMembers){
         Add-Content -Path "$outputdir\administrators.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
     }
-    New-item -Path $outputdir -Name "organization_management.txt" -ItemType File
-    foreach($member in $OrganizationManagementMembers){
-        Add-Content -Path "$outputdir\orgainzation_management.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
-    }
+    #New-item -Path $outputdir -Name "organization_management.txt" -ItemType File
+    #foreach($member in $OrganizationManagementMembers){
+    #    Add-Content -Path "$outputdir\orgainzation_management.txt" -Value "$($member.objectClass) $($member.SamAccountName) $($member.Name)"
+    #}
 }
 Function Get-DCEval{#Basic validation of all DCs in forest
     #Collect all DCs in forest
@@ -1017,6 +1065,7 @@ Function Get-DCEval{#Basic validation of all DCs in forest
     #DCs with weak Kerberos algorhythm (*CH* Changed below to look for msDS-SupportedEncryptionTypes to work with 2008R2)
     $ADcomputers  = $ADs | ForEach-Object {Get-ADComputer $_.Name -Properties msDS-SupportedEncryptionTypes}
     $WeakKerberos = $false
+    New-item -Path $outputdir -Name "dcs_weak_kerberos_ciphersuite.txt" -ItemType File
     foreach($DC in $ADcomputers){#(*CH* Need to define all combinations here, only done 28 and 31 so far) (31 = "DES, RC4, AES128, AES256", 28 = "RC4, AES128, AES256")
         if( $DC."msDS-SupportedEncryptionTypes" -eq 28 -or $DC."msDS-SupportedEncryptionTypes" -eq 31 ){
             $WeakKerberos = $true
@@ -1044,6 +1093,7 @@ Function Get-DefaultDomainControllersPolicy{#Enumerates Default Domain Controlle
     $GPOreport                            = Get-GPOReport -Guid $GPO.Id -ReportType Xml
     #Interactive local logon
     $permissionindex = $GPOreport.IndexOf('SeInteractiveLogonRight')
+    New-item -Path $outputdir -Name "default_domain_controller_policy_audit.txt" -ItemType File
     if($permissionindex -gt 0 -and $GPO.DisplayName -eq 'Default Domain Controllers Policy'){
         $xmlreport = [xml]$GPOreport
         foreach($member in (($xmlreport.GPO.Computer.ExtensionData.Extension.UserRightsAssignment | Where-Object {$_.Name -eq 'SeInteractiveLogonRight'}).Member)){
@@ -1156,10 +1206,12 @@ Function Get-RecentChanges(){#Retrieve users and groups that have been created d
     $progresscountGroups = 0
     $totalcountUsers     = ($newUsers  | Measure-Object | Select-Object Count).count
     $totalcountGroups    = ($newGroups | Measure-Object | Select-Object Count).count
+    New-item -Path $outputdir -Name "new_users.txt" -ItemType File
     if($totalcountUsers -gt 0){
         foreach($newUser in $newUsers ){Add-Content -Path "$outputdir\new_users.txt" -Value "Account $($newUser.SamAccountName) was created $($newUser.whenCreated)"}
         Write-Both "    [!] $totalcountUsers new users were created last 30 days, see $outputdir\new_users.txt"
     }
+    New-item -Path $outputdir -Name "new_groups.txt" -ItemType File
     if($totalcountGroups -gt 0){
         foreach($newGroup in $newGroups ){Add-Content -Path "$outputdir\new_groups.txt" -Value "Group $($newGroup.SamAccountName) was created $($newGroup.whenCreated)"}
         Write-Both "    [!] $totalcountGroups new groups were created last 30 days, see $outputdir\new_groups.txt"
@@ -1362,6 +1414,8 @@ if($laps -or $all -or $dgov )           { $running=$true ; Write-Both "[*] Check
 if($authpolsilos -or $all -or $dgov)   { $running=$true ; Write-Both "[*] Check For Existence of Authentication Polices and Silos" ; Get-AuthenticationPoliciesAndSilos }
 if($insecurednszone -or $all){ $running=$true ; Write-Both "[*] Check For Existence DNS Zones allowing insecure updates"           ; Get-DNSZoneInsecure }
 if($recentchanges -or $all -or $dgov)  { $running=$true ; Write-Both "[*] Check For newly created users and groups"                ; Get-RecentChanges }
+if($usersall -or $dgov)  { $running=$true ; Write-Both "[*] Get all users"                                                         ; Get-AllUsers }
+if($computersall -or $dgov)  { $running=$true ; Write-Both "[*] Get all computers"                                                 ; Get-AllComputers }
 if(!$running){ Write-Both "[!] No arguments selected"
     Write-Both "[!] Other options are as follows, they can be used in combination"
     Write-Both "    -installdeps installs optionnal features (DSInternals)"
