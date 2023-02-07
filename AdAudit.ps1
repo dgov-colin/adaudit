@@ -679,14 +679,15 @@ Function Get-AccountPassDontExpire{#Lists accounts who's passwords dont expire
     }
 }
 Function Get-AllUsers{#Lists all AD user accounts
-    $userAccounts = Search-ADaccount -UsersOnly | Where-Object {$_.Enabled -eq true}
-    $count            = 0
-    $totalcount       = ($userAccounts | Measure-Object | Select-Object Count).count
+    $userAccounts = Get-ADUser -Filter * -Properties Name, Enabled, LastLogonDate
+    $count        = 0
+    $totalcount   = ($userAccounts | Measure-Object | Select-Object Count).Count
+
     New-item -Path $outputdir -Name "accounts_users_all.txt" -ItemType File -force
     foreach($account in $userAccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for all users..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
-        Add-Content -Path "$outputdir\accounts_users_all.txt" -Value "$($account.SamAccountName)"
+        Add-Content -Path "$outputdir\accounts_users_all.txt" -Value "$($account.SamAccountName) $($account.Enabled) ($($account.LastLogonDate)"
         $count++
     }
     Write-Progress -Activity "Searching for all users..." -Status "Ready" -Completed
@@ -695,14 +696,14 @@ Function Get-AllUsers{#Lists all AD user accounts
     }
 }
 Function Get-AllComputers{#Lists all AD computer accounts
-    $computerAccounts = Search-ADaccount -ComputersOnly | Where-Object {$_.Enabled -eq true}
+    $computerAccounts = Get-ADComputer -filter * -properties name, enabled, operatingsystem, operatingsystemversion
     $count            = 0
     $totalcount       = ($computerAccounts | Measure-Object | Select-Object Count).count
     New-item -Path $outputdir -Name "accounts_computers_all.txt" -ItemType File -force
     foreach($account in $computerAccounts){
         if($totalcount -eq 0){ break }
         Write-Progress -Activity "Searching for all computers..." -Status "Currently identifed $count" -PercentComplete ($count / $totalcount*100)
-        Add-Content -Path "$outputdir\accounts_computers_all.txt" -Value "$($account.SamAccountName) $($account.LastLogonDate)"
+        Add-Content -Path "$outputdir\accounts_computers_all.txt" -Value "$($account.Name) $($account.Enabled) $($account.OperatingSystem) $($account.OperatingSystemVersion)"
         $count++
     }
     Write-Progress -Activity "Searching for all computers..." -Status "Ready" -Completed
